@@ -50,35 +50,42 @@ import fr.paris.lutece.portal.business.portlet.PortletHome;
 import fr.paris.lutece.portal.service.search.IndexationService;
 import fr.paris.lutece.portal.service.search.SearchItem;
 import fr.paris.lutece.portal.service.spring.SpringContextService;
+import fr.paris.lutece.portal.service.util.AppException;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import fr.paris.lutece.util.ReferenceItem;
 import fr.paris.lutece.util.url.UrlItem;
 
-import org.apache.commons.lang.StringUtils;
-
-import org.apache.lucene.demo.html.HTMLParser;
-import org.apache.lucene.document.DateTools;
-import org.apache.lucene.document.Field;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.lang.StringUtils;
+import org.apache.lucene.document.DateTools;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
+import org.apache.tika.exception.TikaException;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.ParseContext;
+import org.apache.tika.parser.html.HtmlParser;
+import org.apache.tika.sax.BodyContentHandler;
+import org.xml.sax.ContentHandler;
+import org.xml.sax.SAXException;
+
 
 /**
- *
+ * 
  * MultiRootDocumentIndexer.
- * Most of methods taken from {@link DocumentIndexer} (no suitable injection point).
+ * Most of methods taken from {@link DocumentIndexer} (no suitable injection
+ * point).
  * @see #indexDocuments()
  * @see #getContentToIndex(Document)
- *
+ * 
  */
 public class MultiRootDocumentIndexer extends DocumentIndexer
 {
@@ -99,38 +106,38 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * @throws IOException i/o exception
      * @throws InterruptedException interrupted exception
      */
-    public void indexDocuments(  ) throws IOException, InterruptedException
+    public void indexDocuments( ) throws IOException, InterruptedException
     {
         String strBaseUrl = AppPropertiesService.getProperty( PROPERTY_PAGE_BASE_URL );
         Page page;
-        Set<Integer> listIdsPages = PageTreeUtils.getListPagesIdsFromRoot(  );
+        Set<Integer> listIdsPages = PageTreeUtils.getListPagesIdsFromRoot( );
 
-        for ( Portlet portlet : PortletHome.findByType( DocumentListPortletHome.getInstance(  ).getPortletTypeId(  ) ) )
+        for ( Portlet portlet : PortletHome.findByType( DocumentListPortletHome.getInstance( ).getPortletTypeId( ) ) )
         {
-            if ( listIdsPages.contains( portlet.getPageId(  ) ) )
+            if ( listIdsPages.contains( portlet.getPageId( ) ) )
             {
-                page = PageHome.getPage( portlet.getPageId(  ) );
+                page = PageHome.getPage( portlet.getPageId( ) );
 
-                for ( Document d : PublishingService.getInstance(  ).getPublishedDocumentsByPortletId( portlet.getId(  ) ) )
+                for ( Document d : PublishingService.getInstance( ).getPublishedDocumentsByPortletId( portlet.getId( ) ) )
                 {
-                    Document document = DocumentHome.findByPrimaryKey( d.getId(  ) );
+                    Document document = DocumentHome.findByPrimaryKey( d.getId( ) );
 
                     // Reload the full object to get all its searchable attributes
                     UrlItem url = new UrlItem( strBaseUrl );
-                    url.addParameter( PARAMETER_DOCUMENT_ID, document.getId(  ) );
-                    url.addParameter( PARAMETER_PORTLET_ID, portlet.getId(  ) );
+                    url.addParameter( PARAMETER_DOCUMENT_ID, document.getId( ) );
+                    url.addParameter( PARAMETER_PORTLET_ID, portlet.getId( ) );
 
-                    String strPortletDocumentId = document.getId(  ) + "_" + SHORT_NAME + "&" + portlet.getId(  );
+                    String strPortletDocumentId = document.getId( ) + "_" + SHORT_NAME + "&" + portlet.getId( );
                     org.apache.lucene.document.Document doc = null;
 
                     try
                     {
-                        doc = getDocument( document, url.getUrl(  ), page.getRole(  ), strPortletDocumentId );
+                        doc = getDocument( document, url.getUrl( ), page.getRole( ), strPortletDocumentId );
                     }
                     catch ( Exception e )
                     {
-                        AppLogService.error( "Indexer : " + getName(  ) + " - ERROR (document ID : " +
-                            document.getId(  ) + ", portlet ID : " + portlet.getId(  ) + ") : " + e.getMessage(  ), e );
+                        AppLogService.error( "Indexer : " + getName( ) + " - ERROR (document ID : " + document.getId( )
+                                + ", portlet ID : " + portlet.getId( ) + ") : " + e.getMessage( ), e );
                     }
 
                     if ( doc != null )
@@ -149,29 +156,29 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * @throws IOException i/o exception
      * @throws InterruptedException interrupted exception
      */
-    public List<org.apache.lucene.document.Document> getDocuments( String strIdDocument )
-        throws IOException, InterruptedException
+    public List<org.apache.lucene.document.Document> getDocuments( String strIdDocument ) throws IOException,
+            InterruptedException
     {
-        List<org.apache.lucene.document.Document> listDocs = new ArrayList<org.apache.lucene.document.Document>(  );
+        List<org.apache.lucene.document.Document> listDocs = new ArrayList<org.apache.lucene.document.Document>( );
         int nIdDocument = Integer.parseInt( strIdDocument );
         Document document = DocumentHome.findByPrimaryKey( nIdDocument );
-        Iterator<Portlet> it = PublishingService.getInstance(  ).getPortletsByDocumentId( Integer.toString( nIdDocument ) )
-                                                .iterator(  );
+        Iterator<Portlet> it = PublishingService.getInstance( )
+                .getPortletsByDocumentId( Integer.toString( nIdDocument ) ).iterator( );
         String strBaseUrl = AppPropertiesService.getProperty( PROPERTY_PAGE_BASE_URL );
         Page page;
 
-        while ( it.hasNext(  ) )
+        while ( it.hasNext( ) )
         {
-            Portlet portlet = it.next(  );
+            Portlet portlet = it.next( );
             UrlItem url = new UrlItem( strBaseUrl );
             url.addParameter( PARAMETER_DOCUMENT_ID, nIdDocument );
-            url.addParameter( PARAMETER_PORTLET_ID, portlet.getId(  ) );
+            url.addParameter( PARAMETER_PORTLET_ID, portlet.getId( ) );
 
-            String strPortletDocumentId = nIdDocument + "_" + SHORT_NAME + "&" + portlet.getId(  );
+            String strPortletDocumentId = nIdDocument + "_" + SHORT_NAME + "&" + portlet.getId( );
 
-            page = PageHome.getPage( portlet.getPageId(  ) );
+            page = PageHome.getPage( portlet.getPageId( ) );
 
-            org.apache.lucene.document.Document doc = getDocument( document, url.getUrl(  ), page.getRole(  ),
+            org.apache.lucene.document.Document doc = getDocument( document, url.getUrl( ), page.getRole( ),
                     strPortletDocumentId );
             listDocs.add( doc );
         }
@@ -183,7 +190,7 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * Returns the indexer service name
      * @return the indexer service name
      */
-    public String getName(  )
+    public String getName( )
     {
         return INDEXER_NAME;
     }
@@ -192,7 +199,7 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * Returns the indexer service version
      * @return The indexer service version
      */
-    public String getVersion(  )
+    public String getVersion( )
     {
         return INDEXER_VERSION;
     }
@@ -201,7 +208,7 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * Returns the indexer service description
      * @return The indexer service description
      */
-    public String getDescription(  )
+    public String getDescription( )
     {
         return INDEXER_DESCRIPTION;
     }
@@ -210,7 +217,7 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      * Tells whether the service is enable or not
      * @return true if enable, otherwise false
      */
-    public boolean isEnable(  )
+    public boolean isEnable( )
     {
         String strEnable = AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE, "true" );
 
@@ -218,72 +225,88 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
     }
 
     /**
-     * Builds a document which will be used by Lucene during the indexing of the pages of the site with the following
+     * Builds a document which will be used by Lucene during the indexing of the
+     * pages of the site with the following
      * fields : summary, uid, url, contents, title and description.
-     *
+     * 
      * @param document the document to index
      * @param strUrl the url of the documents
      * @param strRole the lutece role of the page associate to the document
-     * @param strPortletDocumentId the document id concatened to the id portlet with a & in the middle
+     * @param strPortletDocumentId the document id concatened to the id portlet
+     *            with a & in the middle
      * @return the built Document
      * @throws IOException The IO Exception
      * @throws InterruptedException The InterruptedException
      */
     public static org.apache.lucene.document.Document getDocument( Document document, String strUrl, String strRole,
-        String strPortletDocumentId ) throws IOException, InterruptedException
+            String strPortletDocumentId ) throws IOException, InterruptedException
     {
         // make a new, empty document
-        org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document(  );
+        org.apache.lucene.document.Document doc = new org.apache.lucene.document.Document( );
 
         // Add the url as a field named "url".  Use an UnIndexed field, so
         // that the url is just stored with the document, but is not searchable.
         String strDisplayedUrl = strUrl;
         String strUrlSuffix = AppPropertiesService.getProperty( PROPERTY_SEARCH_SUFFIX );
 
+        FieldType ft = new FieldType( StringField.TYPE_STORED );
+        ft.setOmitNorms( false );
+
+        FieldType ftNo = new FieldType( StringField.TYPE_STORED );
+        ftNo.setIndexed( false );
+        ftNo.setTokenized( false );
+        ftNo.setOmitNorms( false );
+
+        FieldType ftNotStored = new FieldType( StringField.TYPE_NOT_STORED );
+        ftNotStored.setOmitNorms( false );
+        ftNotStored.setTokenized( true );
+
         if ( StringUtils.isNotBlank( strUrlSuffix ) )
         {
             strDisplayedUrl += strUrlSuffix;
         }
 
-        doc.add( new Field( SearchItem.FIELD_URL, strDisplayedUrl, Field.Store.YES, Field.Index.NOT_ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_URL, strDisplayedUrl, ft ) );
 
         // Add the PortletDocumentId as a field named "document_portlet_id".  
-        doc.add( new Field( SearchItem.FIELD_DOCUMENT_PORTLET_ID, strPortletDocumentId, Field.Store.YES,
-                Field.Index.NOT_ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_DOCUMENT_PORTLET_ID, strPortletDocumentId, ft ) );
 
         // Add the last modified date of the file a field named "modified".
         // Use a field that is indexed (i.e. searchable), but don't tokenize
         // the field into words.
-        String strDate = DateTools.dateToString( document.getDateModification(  ), DateTools.Resolution.DAY );
-        doc.add( new Field( SearchItem.FIELD_DATE, strDate, Field.Store.YES, Field.Index.NOT_ANALYZED ) );
+        String strDate = DateTools.dateToString( document.getDateModification( ), DateTools.Resolution.DAY );
+        doc.add( new Field( SearchItem.FIELD_DATE, strDate, ft ) );
 
         // Add the uid as a field, so that index can be incrementally maintained.
         // This field is not stored with document, it is indexed, but it is not
         // tokenized prior to indexing.
-        String strIdDocument = String.valueOf( document.getId(  ) );
-        doc.add( new Field( SearchItem.FIELD_UID, strIdDocument + "_" + DocumentIndexer.SHORT_NAME, Field.Store.YES,
-                Field.Index.NOT_ANALYZED ) );
+        String strIdDocument = String.valueOf( document.getId( ) );
+        doc.add( new Field( SearchItem.FIELD_UID, strIdDocument + "_" + DocumentIndexer.SHORT_NAME, ft ) );
 
         String strContentToIndex = getContentToIndex( document );
-        StringReader readerPage = new StringReader( strContentToIndex );
-        HTMLParser parser = new HTMLParser( readerPage );
+        ContentHandler handler = new BodyContentHandler( );
+        Metadata metadata = new Metadata( );
+        try
+        {
+            new HtmlParser( ).parse( new ByteArrayInputStream( strContentToIndex.getBytes( ) ), handler, metadata,
+                    new ParseContext( ) );
+        }
+        catch ( SAXException e )
+        {
+            throw new AppException( "Error during page parsing." );
+        }
+        catch ( TikaException e )
+        {
+            throw new AppException( "Error during page parsing." );
+        }
 
         //the content of the article is recovered in the parser because this one
         //had replaced the encoded caracters (as &eacute;) by the corresponding special caracter (as ?)
-        Reader reader = parser.getReader(  );
-        int c;
-        StringBuilder sb = new StringBuilder(  );
-
-        while ( ( c = reader.read(  ) ) != -1 )
-        {
-            sb.append( String.valueOf( (char) c ) );
-        }
-
-        reader.close(  );
+        StringBuilder sb = new StringBuilder( handler.toString( ) );
 
         // Add the tag-stripped contents as a Reader-valued Text field so it will
         // get tokenized and indexed.
-        doc.add( new Field( SearchItem.FIELD_CONTENTS, sb.toString(  ), Field.Store.NO, Field.Index.ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_CONTENTS, sb.toString( ), TextField.TYPE_NOT_STORED ) );
 
         // Add the title as a separate Text field, so that it can be searched
         // separately.
@@ -293,30 +316,30 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
 
         if ( StringUtils.isNotBlank( strRegexpTitle ) )
         {
-            for ( DocumentAttribute attribute : document.getAttributes(  ) )
+            for ( DocumentAttribute attribute : document.getAttributes( ) )
             {
-                AppLogService.error( attribute.getCode(  ) );
+                AppLogService.error( attribute.getCode( ) );
 
-                if ( attribute.getCode(  ).matches( strRegexpTitle ) )
+                if ( attribute.getCode( ).matches( strRegexpTitle ) )
                 {
-                    strTitle = attribute.getTextValue(  );
+                    strTitle = attribute.getTextValue( );
                 }
             }
         }
 
         if ( strTitle == null )
         {
-            strTitle = document.getTitle(  );
+            strTitle = document.getTitle( );
         }
 
-        doc.add( new Field( SearchItem.FIELD_TITLE, strTitle, Field.Store.YES, Field.Index.NO ) );
+        doc.add( new Field( SearchItem.FIELD_TITLE, strTitle, ftNo ) );
 
-        doc.add( new Field( SearchItem.FIELD_TYPE, document.getType(  ), Field.Store.YES, Field.Index.NOT_ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_TYPE, document.getType( ), ft ) );
 
-        doc.add( new Field( SearchItem.FIELD_ROLE, strRole, Field.Store.YES, Field.Index.NOT_ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_ROLE, strRole, ft ) );
 
         // add metadata (mapped to summary)
-        doc.add( new Field( SearchItem.FIELD_METADATA, document.getSummary(  ), Field.Store.NO, Field.Index.ANALYZED ) );
+        doc.add( new Field( SearchItem.FIELD_METADATA, document.getSummary( ), ftNotStored ) );
 
         // return the document
         return doc;
@@ -329,41 +352,42 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
      */
     private static String getContentToIndex( Document document )
     {
-        StringBuilder sbContentToIndex = new StringBuilder(  );
-        sbContentToIndex.append( document.getTitle(  ) );
+        StringBuilder sbContentToIndex = new StringBuilder( );
+        sbContentToIndex.append( document.getTitle( ) );
 
-        for ( DocumentAttribute attribute : document.getAttributes(  ) )
+        for ( DocumentAttribute attribute : document.getAttributes( ) )
         {
             // check prefix
-            if ( attribute.isSearchable(  ) && !attribute.getCode(  ).matches( PageTreeUtils.NOT_INDEXED_REGEXP ) )
+            if ( attribute.isSearchable( ) && !attribute.getCode( ).matches( PageTreeUtils.NOT_INDEXED_REGEXP ) )
             {
-                if ( !attribute.isBinary(  ) )
+                if ( !attribute.isBinary( ) )
                 {
                     // Text attributes
                     sbContentToIndex.append( " " );
-                    sbContentToIndex.append( attribute.getTextValue(  ) );
+                    sbContentToIndex.append( attribute.getTextValue( ) );
                 }
                 else
                 {
                     // Binary file attribute
                     // Gets indexer depending on the ContentType (ie: "application/pdf" should use a PDF indexer)
-                    IFileIndexerFactory factoryIndexer = (IFileIndexerFactory) SpringContextService.getBean( IFileIndexerFactory.BEAN_FILE_INDEXER_FACTORY );
-                    IFileIndexer indexer = factoryIndexer.getIndexer( attribute.getValueContentType(  ) );
+                    IFileIndexerFactory factoryIndexer = (IFileIndexerFactory) SpringContextService
+                            .getBean( IFileIndexerFactory.BEAN_FILE_INDEXER_FACTORY );
+                    IFileIndexer indexer = factoryIndexer.getIndexer( attribute.getValueContentType( ) );
 
                     if ( indexer != null )
                     {
                         try
                         {
-                            AppLogService.error( "Document ID : " + document.getId(  ) );
+                            AppLogService.error( "Document ID : " + document.getId( ) );
 
-                            ByteArrayInputStream bais = new ByteArrayInputStream( attribute.getBinaryValue(  ) );
+                            ByteArrayInputStream bais = new ByteArrayInputStream( attribute.getBinaryValue( ) );
                             sbContentToIndex.append( " " );
                             sbContentToIndex.append( indexer.getContentToIndex( bais ) );
-                            bais.close(  );
+                            bais.close( );
                         }
                         catch ( IOException e )
                         {
-                            AppLogService.error( e.getMessage(  ), e );
+                            AppLogService.error( e.getMessage( ), e );
                         }
                     }
                 }
@@ -372,30 +396,30 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
 
         // Index Metadata
         sbContentToIndex.append( " " );
-        sbContentToIndex.append( document.getXmlMetadata(  ) );
+        sbContentToIndex.append( document.getXmlMetadata( ) );
 
-        return sbContentToIndex.toString(  );
+        return sbContentToIndex.toString( );
     }
 
     /**
      * {@inheritDoc}
      */
-    public List<String> getListType(  )
+    public List<String> getListType( )
     {
-        List<String> typeList = new ArrayList<String>(  );
+        List<String> typeList = new ArrayList<String>( );
 
-        for ( ReferenceItem item : DocumentTypeHome.getDocumentTypesList(  ) )
+        for ( ReferenceItem item : DocumentTypeHome.getDocumentTypesList( ) )
         {
-            typeList.add( item.getName(  ) );
+            typeList.add( item.getName( ) );
         }
 
         return typeList;
     }
 
     /**
-             * {@inheritDoc}
-             */
-    public String getSpecificSearchAppUrl(  )
+     * {@inheritDoc}
+     */
+    public String getSpecificSearchAppUrl( )
     {
         return JSP_PAGE_ADVANCED_SEARCH;
     }
