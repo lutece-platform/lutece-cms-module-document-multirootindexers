@@ -253,7 +253,6 @@ public class MultiRootDocumentIndexer extends DocumentIndexer
         ft.setOmitNorms( false );
 
         FieldType ftNo = new FieldType( StringField.TYPE_STORED );
-        ftNo.setIndexed( false );
         ftNo.setTokenized( false );
         ftNo.setOmitNorms( false );
 
